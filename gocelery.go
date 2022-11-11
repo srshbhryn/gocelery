@@ -116,6 +116,8 @@ type AsyncResult struct {
 	result  *ResultMessage
 }
 
+var TaskFailedError = errors.New("TaskFailedError")
+
 // Get gets actual result from backend
 // It blocks for period of time set by timeout and returns error if unavailable
 func (ar *AsyncResult) Get(timeout time.Duration) (interface{}, error) {
@@ -128,6 +130,9 @@ func (ar *AsyncResult) Get(timeout time.Duration) (interface{}, error) {
 			return nil, err
 		case <-ticker.C:
 			val, err := ar.AsyncGet()
+			if errors.Is(err, TaskFailedError) {
+				return nil, err
+			}
 			if err != nil {
 				continue
 			}
@@ -135,8 +140,6 @@ func (ar *AsyncResult) Get(timeout time.Duration) (interface{}, error) {
 		}
 	}
 }
-
-var TaskFailedError = errors.New("TaskFailedError by zero")
 
 // AsyncGet gets actual result from backend and returns nil if not available
 func (ar *AsyncResult) AsyncGet() (interface{}, error) {
