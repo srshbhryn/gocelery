@@ -160,7 +160,7 @@ func TestBrokerSendGet(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		message, err := tc.broker.GetTaskMessage()
 		if err != nil {
-			t.Errorf("test '%s': failed to get celery message from broker: %v", tc.name, err)
+			t.Error(TaskFailedError, err)
 			releaseCeleryMessage(celeryMessage)
 			continue
 		}

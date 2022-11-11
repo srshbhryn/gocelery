@@ -6,6 +6,7 @@ package gocelery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -135,6 +136,8 @@ func (ar *AsyncResult) Get(timeout time.Duration) (interface{}, error) {
 	}
 }
 
+var TaskFailedError = errors.New("TaskFailedError by zero")
+
 // AsyncGet gets actual result from backend and returns nil if not available
 func (ar *AsyncResult) AsyncGet() (interface{}, error) {
 	if ar.result != nil {
@@ -146,6 +149,9 @@ func (ar *AsyncResult) AsyncGet() (interface{}, error) {
 	}
 	if val == nil {
 		return nil, err
+	}
+	if val.Status == "FAILURE" {
+		return nil, TaskFailedError
 	}
 	if val.Status != "SUCCESS" {
 		return nil, fmt.Errorf("error response status %v", val)
