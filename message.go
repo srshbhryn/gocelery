@@ -32,6 +32,12 @@ func (cm *CeleryMessage) reset() {
 	cm.Properties.DeliveryTag = uuid.Must(uuid.NewV4()).String()
 }
 
+var myUUid = setMyUUID()
+
+func setMyUUID() string {
+	return uuid.Must(uuid.NewV4()).String()
+}
+
 var celeryMessagePool = sync.Pool{
 	New: func() interface{} {
 		return &CeleryMessage{
@@ -41,7 +47,7 @@ var celeryMessagePool = sync.Pool{
 			Properties: CeleryProperties{
 				BodyEncoding:  "base64",
 				CorrelationID: uuid.Must(uuid.NewV4()).String(),
-				ReplyTo:       uuid.Must(uuid.NewV4()).String(),
+				ReplyTo:       myUUid,
 				DeliveryInfo: CeleryDeliveryInfo{
 					Priority:   0,
 					RoutingKey: "celery",
@@ -182,11 +188,12 @@ func (tm *TaskMessage) Encode() (string, error) {
 
 // ResultMessage is return message received from broker
 type ResultMessage struct {
-	ID        string        `json:"task_id"`
-	Status    string        `json:"status"`
-	Traceback interface{}   `json:"traceback"`
-	Result    interface{}   `json:"result"`
-	Children  []interface{} `json:"children"`
+	ID         string                 `json:"task_id"`
+	Status     string                 `json:"status"`
+	Traceback  interface{}            `json:"traceback"`
+	Result     interface{}            `json:"result"`
+	Children   []interface{}          `json:"children"`
+	Properties map[string]interface{} `json:"properties"`
 }
 
 func (rm *ResultMessage) reset() {
