@@ -33,11 +33,14 @@ func (cb *RedisRPRCBackend) GetResult(taskID string) (*ResultMessage, error) {
 	if !ok {
 		cb.resultsChannels[taskID] = make(chan *ResultMessage, 1)
 	}
+	ch := cb.resultsChannels[taskID]
 	cb.mutex.Unlock()
 
-	val := <-cb.resultsChannels[taskID]
-	close(cb.resultsChannels[taskID])
+	val := <-ch
+	close(ch)
+	cb.mutex.Lock()
 	delete(cb.resultsChannels, taskID)
+	cb.mutex.Unlock()
 	return val, nil
 }
 
@@ -47,11 +50,14 @@ func (cb *RedisRPRCBackend) GetResultWithTimeOut(taskID string, timeout time.Dur
 	if !ok {
 		cb.resultsChannels[taskID] = make(chan *ResultMessage, 1)
 	}
+	ch := cb.resultsChannels[taskID]
 	cb.mutex.Unlock()
 	select {
-	case val := <-cb.resultsChannels[taskID]:
-		close(cb.resultsChannels[taskID])
+	case val := <-ch:
+		close(ch)
+		cb.mutex.Lock()
 		delete(cb.resultsChannels, taskID)
+		cb.mutex.Unlock()
 		return val
 	case <-time.After(timeout):
 		return nil
@@ -102,8 +108,9 @@ func (cb *RedisRPRCBackend) fetchResultsWorker() {
 			if !ok {
 				cb.resultsChannels[resultMessage.ID] = make(chan *ResultMessage, 1)
 			}
+			ch := cb.resultsChannels[resultMessage.ID]
 			cb.mutex.Unlock()
-			cb.resultsChannels[resultMessage.ID] <- resultMessage
+			ch <- resultMessage
 		}()
 	}
 }

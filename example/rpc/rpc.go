@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -41,19 +42,16 @@ func main() {
 	argA := "99994715bc10442f85a1de3a8bad9896"
 	argB := "13"
 	// run task
-	couter := 0
-	for i := 0; i < 10; i++ {
-		time.Sleep(time.Second)
+	var wg = sync.WaitGroup{}
+	wg.Add(1000)
+	for i := 0; i < 1000; i++ {
 		go func() {
-			ar, err := cli.Delay(taskName, argA, argB)
-			if err != nil {
-				panic(err)
-			}
-			r, err := backend.GetResult(ar.TaskID)
-			fmt.Println(r)
-			couter++
-			fmt.Println(couter)
+			ar, _ := cli.Delay(taskName, argA, argB)
+			x, _ := backend.GetResult(ar.TaskID)
+			fmt.Println(x)
+			wg.Done()
+
 		}()
 	}
-	time.Sleep(30 * time.Second)
+	wg.Wait()
 }
