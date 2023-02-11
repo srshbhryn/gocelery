@@ -2,24 +2,16 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/srshbhryn/gocelery"
 )
 
-// Run Celery Worker First!
-// celery -A worker worker --loglevel=debug --without-heartbeat --without-mingle
 func main() {
-
-	// create redis connection pool
 	redisPool := &redis.Pool{
-		MaxIdle:     3,                 // maximum number of idle connections in the pool
-		MaxActive:   0,                 // maximum number of connections allocated by the pool at a given time
-		IdleTimeout: 240 * time.Second, // close connections after remaining idle for this duration
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.DialURL("redis://")
+			c, err := redis.DialURL("redis://127.0.0.1:6379/3")
 			if err != nil {
 				return nil, err
 			}
@@ -29,25 +21,39 @@ func main() {
 			_, err := c.Do("PING")
 			return err
 		},
+		MaxIdle:         32,
+		MaxActive:       32,
+		Wait:            true,
+		MaxConnLifetime: time.Duration(10 * time.Hour),
 	}
 	backend := gocelery.NewRedisRPCcBackend(redisPool)
+	broker := gocelery.NewRedisBroker(redisPool)
+	broker.QueueName = "trade_rpc"
+
 	// initialize celery client
 	cli, _ := gocelery.NewCeleryClient(
-		gocelery.NewRedisBroker(redisPool),
+		broker,
 		backend,
-		1,
+		16,
 	)
 	// prepare arguments
-	taskName := "hw.add"
-	argA := rand.Intn(10)
-	argB := rand.Intn(10)
-
+	taskName := "trade.get_balance"
+	argA := "99994715bc10442f85a1de3a8bad9896"
+	argB := "13"
 	// run task
-	ar, err := cli.Delay(taskName, argA, argB)
-	if err != nil {
-		panic(err)
+	couter := 0
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Second)
+		go func() {
+			ar, err := cli.Delay(taskName, argA, argB)
+			if err != nil {
+				panic(err)
+			}
+			r, err := backend.GetResult(ar.TaskID)
+			fmt.Println(r)
+			couter++
+			fmt.Println(couter)
+		}()
 	}
-	r, err := backend.GetResult(ar.TaskID)
-	fmt.Println(r)
-
+	time.Sleep(30 * time.Second)
 }

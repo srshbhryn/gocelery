@@ -40,7 +40,7 @@ func setMyUUID() string {
 
 var celeryMessagePool = sync.Pool{
 	New: func() interface{} {
-		return &CeleryMessage{
+		m := &CeleryMessage{
 			Body:        "",
 			Headers:     nil,
 			ContentType: "application/json",
@@ -58,11 +58,32 @@ var celeryMessagePool = sync.Pool{
 			},
 			ContentEncoding: "utf-8",
 		}
+		m.Properties.CorrelationID = uuid.Must(uuid.NewV4()).String()
+		m.Properties.ReplyTo = myUUid
+		m.Properties.DeliveryTag = myUUid
+		return m
 	},
 }
 
 func getCeleryMessage(encodedTaskMessage string) *CeleryMessage {
-	msg := celeryMessagePool.Get().(*CeleryMessage)
+	msg := &CeleryMessage{
+		Body:        "",
+		Headers:     nil,
+		ContentType: "application/json",
+		Properties: CeleryProperties{
+			BodyEncoding:  "base64",
+			CorrelationID: uuid.Must(uuid.NewV4()).String(),
+			ReplyTo:       myUUid,
+			DeliveryInfo: CeleryDeliveryInfo{
+				Priority:   0,
+				RoutingKey: "celery",
+				Exchange:   "celery",
+			},
+			DeliveryMode: 2,
+			DeliveryTag:  uuid.Must(uuid.NewV4()).String(),
+		},
+		ContentEncoding: "utf-8",
+	}
 	msg.Body = encodedTaskMessage
 	return msg
 }
