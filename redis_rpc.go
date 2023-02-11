@@ -60,48 +60,51 @@ func (cb *RedisRPRCBackend) GetResultWithTimeOut(taskID string, timeout time.Dur
 
 func (cb *RedisRPRCBackend) fetchResultsWorker() {
 	conn := cb.Get()
-	defer conn.Close()
 	for {
+		err := conn.Err()
+		if err != nil {
+			log.Printf("Connection ERROR %s\n", err)
+			conn = cb.Get()
+			continue
+		}
 		val, err := conn.Do("BRPOP", myUUid, "0.0")
 		if err != nil {
 			log.Printf("RedisRPRCBackend fetchResultsWorker connection error %s\n", err)
-			go cb.fetchResultsWorker()
-			return
+			conn = cb.Get()
+			continue
 		}
-		res, ok := val.([]interface{})
-		if !ok {
-			log.Printf("RedisRPRCBackend fetchResultsWorker invalid brpop response %s\n", res)
-			go cb.fetchResultsWorker()
-			return
-		}
-		response := make(map[string]interface{})
-		err = json.Unmarshal(res[1].([]byte), &response)
-		if err != nil {
-			log.Printf("RedisRPRCBackend fetchResultsWorker invalid brpop response %s\n", res)
-			go cb.fetchResultsWorker()
-			return
-		}
-		decodedBody, err := base64.StdEncoding.DecodeString(response["body"].(string))
-		if err != nil {
-			log.Printf("RedisRPRCBackend fetchResultsWorker invalid brpop response %s\n", res)
-			go cb.fetchResultsWorker()
-			return
-		}
+		go func() {
+			res, ok := val.([]interface{})
+			if !ok {
+				log.Printf("RedisRPRCBackend fetchResultsWorker invalid brpop response %s\n", res)
+				return
+			}
+			response := make(map[string]interface{})
+			err = json.Unmarshal(res[1].([]byte), &response)
+			if err != nil {
+				log.Printf("RedisRPRCBackend fetchResultsWorker invalid brpop response %s\n", res)
+				return
+			}
+			decodedBody, err := base64.StdEncoding.DecodeString(response["body"].(string))
+			if err != nil {
+				log.Printf("RedisRPRCBackend fetchResultsWorker invalid brpop response %s\n", res)
+				return
+			}
 
-		resultMessage := resultMessagePool.Get().(*ResultMessage)
-		err = json.Unmarshal(decodedBody, &resultMessage)
-		if err != nil {
-			log.Println("RedisRPRCBackend fetchResultsWorker cant unmarshal")
-			go cb.fetchResultsWorker()
-			return
-		}
-		cb.mutex.Lock()
-		_, ok = cb.resultsChannels[resultMessage.ID]
-		if !ok {
-			cb.resultsChannels[resultMessage.ID] = make(chan *ResultMessage, 1)
-		}
-		cb.mutex.Unlock()
-		cb.resultsChannels[resultMessage.ID] <- resultMessage
+			resultMessage := resultMessagePool.Get().(*ResultMessage)
+			err = json.Unmarshal(decodedBody, &resultMessage)
+			if err != nil {
+				log.Println("RedisRPRCBackend fetchResultsWorker cant unmarshal")
+				return
+			}
+			cb.mutex.Lock()
+			_, ok = cb.resultsChannels[resultMessage.ID]
+			if !ok {
+				cb.resultsChannels[resultMessage.ID] = make(chan *ResultMessage, 1)
+			}
+			cb.mutex.Unlock()
+			cb.resultsChannels[resultMessage.ID] <- resultMessage
+		}()
 	}
 }
 
