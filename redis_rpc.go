@@ -28,14 +28,13 @@ func NewRedisRPCcBackend(conn *redis.Pool) *RedisRPRCBackend {
 
 func (cb *RedisRPRCBackend) GetResult(taskID string) (*ResultMessage, error) {
 
+	cb.mutex.Lock()
 	_, ok := cb.resultsChannels[taskID]
 	if !ok {
-		func() {
-			cb.mutex.Lock()
-			defer cb.mutex.Unlock()
-			cb.resultsChannels[taskID] = make(chan *ResultMessage, 1)
-		}()
+		cb.resultsChannels[taskID] = make(chan *ResultMessage, 1)
 	}
+	cb.mutex.Unlock()
+
 	val := <-cb.resultsChannels[taskID]
 	close(cb.resultsChannels[taskID])
 	delete(cb.resultsChannels, taskID)
@@ -43,16 +42,16 @@ func (cb *RedisRPRCBackend) GetResult(taskID string) (*ResultMessage, error) {
 }
 
 func (cb *RedisRPRCBackend) GetResultWithTimeOut(taskID string, timeout time.Duration) *ResultMessage {
-	ch, ok := cb.resultsChannels[taskID]
-
+	cb.mutex.Lock()
+	_, ok := cb.resultsChannels[taskID]
 	if !ok {
-		cb.mutex.Lock()
 		cb.resultsChannels[taskID] = make(chan *ResultMessage, 1)
-		cb.mutex.Unlock()
 	}
+	cb.mutex.Unlock()
 	select {
-	case val := <-ch:
-		close(ch)
+	case val := <-cb.resultsChannels[taskID]:
+		close(cb.resultsChannels[taskID])
+		delete(cb.resultsChannels, taskID)
 		return val
 	case <-time.After(timeout):
 		return nil
@@ -99,12 +98,9 @@ func (cb *RedisRPRCBackend) fetchResultsWorker() {
 		cb.mutex.Lock()
 		_, ok = cb.resultsChannels[resultMessage.ID]
 		if !ok {
-			func() {
-				cb.mutex.Lock()
-				defer cb.mutex.Unlock()
-				cb.resultsChannels[resultMessage.ID] = make(chan *ResultMessage, 1)
-			}()
+			cb.resultsChannels[resultMessage.ID] = make(chan *ResultMessage, 1)
 		}
+		cb.mutex.Unlock()
 		cb.resultsChannels[resultMessage.ID] <- resultMessage
 	}
 }
